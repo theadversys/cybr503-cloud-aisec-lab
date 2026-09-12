@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  aisec-cell:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cybr503-aisec-target
+    restart: unless-stopped
+    ports:
+      # Initial vulnerable state exposes all services on 0.0.0.0
+      # Students remediate by restricting port 5000 or using Linode Cloud Firewall
+      - "5000:5000"
+      - "8000:8000"
+      - "8501:8501"
+    environment:
+      - BIND_HOST=0.0.0.0
+      - MOCK_LLM=true
+      - CELL_NAME=CYBR503-AISEC-OC-1
+    volumes:
+      - ./guardrails:/app/guardrails
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3

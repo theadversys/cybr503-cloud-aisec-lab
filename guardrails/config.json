@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "block_thought_injection": true,
+  "block_sql_keywords": true,
+  "mask_sensitive_output": true,
+  "blocked_patterns": [
+    "Thought:",
+    "Action:",
+    "Observation:",
+    "\"action\":",
+    "(#system)",
+    "UNION SELECT",
+    "--",
+    "/*"
+  ]
+}
