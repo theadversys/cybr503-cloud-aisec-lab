@@ -20,6 +20,11 @@ import urllib.request
 import urllib.error
 import socket
 
+# Ensure the lab application directory is in Python path when executed from any location
+for candidate_dir in [os.path.expanduser("~/lab-target"), "/opt/cybr503-cell", os.path.dirname(os.path.abspath(__file__))]:
+    if os.path.exists(candidate_dir) and candidate_dir not in sys.path:
+        sys.path.insert(0, candidate_dir)
+
 SECRET_KEY = b"USD-MSCSE-CYBR503-2027-SECRET"
 
 def check_perimeter_isolation():
@@ -41,12 +46,19 @@ def check_perimeter_isolation():
         
         # Check docker-compose file if exists
         compose_hardened = False
-        compose_path = "docker-compose.yml"
-        if os.path.exists(compose_path):
-            with open(compose_path) as f:
-                content = f.read()
-                if "127.0.0.1:5000" in content or "5000:5000" not in content:
-                    compose_hardened = True
+        compose_candidates = [
+            "docker-compose.yml",
+            os.path.expanduser("~/lab-target/docker-compose.yml"),
+            "/opt/cybr503-cell/docker-compose.yml",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "docker-compose.yml")
+        ]
+        for cpath in compose_candidates:
+            if os.path.exists(cpath):
+                with open(cpath) as f:
+                    content = f.read()
+                    if "127.0.0.1:5000" in content or "5000:5000" not in content:
+                        compose_hardened = True
+                break
 
         if compose_hardened or bind_host == "127.0.0.1":
             print("    PASS: Port 5000 is properly isolated to localhost.")
@@ -66,21 +78,34 @@ def check_sql_injection_defense():
     print("\n[+] Check 2: Database Query Parameterization & SQLi Defense...")
     try:
         from transaction_db import TransactionDb
-        db = TransactionDb()
+        
+        # Test against database in lab directory if present
+        candidates = [
+            os.path.expanduser("~/lab-target/transactions.db"),
+            "/opt/cybr503-cell/transactions.db",
+            "transactions.db"
+        ]
+        target_db = "transactions.db"
+        for c in candidates:
+            if os.path.exists(c):
+                target_db = c
+                break
+
+        db = TransactionDb(db_name=target_db)
         sqli_payload = "a' UNION SELECT 1, username, password, '', '100' FROM Users--"
         result = db.get_user_transactions(sqli_payload)
         db.close()
 
         # If vulnerable, result contains passwords like "DocBrown" or "flux-capacitor-123"
-        if "flux-capacitor-123" in result or "Password1" in result:
+        if "flux-capacitor-123" in result or "Password1" in result or "testpass" in result:
             print("    FAIL: SQL injection payload successfully leaked passwords from Users table!")
             return False, "Vulnerable to SQL Injection"
         else:
             print("    PASS: SQL injection payload safely mitigated. Sensitive data protected.")
             return True, "SQL Injection mitigated"
     except Exception as e:
-        print(f"    PASS: SQL query safely rejected adversarial input ({e}).")
-        return True, "SQL Injection mitigated"
+        print(f"    FAIL: Database query check failed: {e}")
+        return False, "Database check failed"
 
 def check_guardrail_defense():
     """
@@ -89,7 +114,19 @@ def check_guardrail_defense():
     print("\n[+] Check 3: AI Input Guardrail Gateway...")
     try:
         from guardrails.guardrail_proxy import GuardrailProxy
-        proxy = GuardrailProxy()
+        
+        cfg_candidates = [
+            os.path.expanduser("~/lab-target/guardrails/config.json"),
+            "/opt/cybr503-cell/guardrails/config.json",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "guardrails", "config.json")
+        ]
+        target_cfg = None
+        for c in cfg_candidates:
+            if os.path.exists(c):
+                target_cfg = c
+                break
+
+        proxy = GuardrailProxy(config_path=target_cfg) if target_cfg else GuardrailProxy()
         
         test_payloads = [
             '{"action": "GetUserTransactions", "action_input": "2"}',
