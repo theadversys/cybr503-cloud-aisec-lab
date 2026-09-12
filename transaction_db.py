@@ -70,10 +70,41 @@ class TransactionDb:
         """
         cursor = self.conn.cursor()
         
-        # Check if environment flag or file dictates hardened mode
+        # Check if environment flag or .env file dictates hardened mode
         hardened = os.getenv("HARDENED_SQL", "false").lower() == "true"
+        if not hardened:
+            env_candidates = [
+                os.path.expanduser("~/lab-target/.env"),
+                "/opt/cybr503-cell/.env",
+                ".env"
+            ]
+            for env_path in env_candidates:
+                if os.path.exists(env_path):
+                    with open(env_path) as f:
+                        for line in f:
+                            if line.strip().startswith("HARDENED_SQL=true"):
+                                hardened = True
+                                break
+                    if hardened:
+                        break
         
-        if hardened:
+        # Also check if student modified the source code in transaction_db.py to use parameterized queries
+        src_candidates = [
+            os.path.expanduser("~/lab-target/transaction_db.py"),
+            "/opt/cybr503-cell/transaction_db.py",
+            "transaction_db.py"
+        ]
+        source_parameterized = False
+        for spath in src_candidates:
+            if os.path.exists(spath):
+                with open(spath) as f:
+                    content = f.read()
+                    # Check if string concatenation in get_user_transactions was eliminated or parameterized query used
+                    if "WHERE userId = ?" in content and "f\"SELECT * FROM Transactions WHERE userId = '{str(userId)}'\"" not in content:
+                        source_parameterized = True
+                break
+        
+        if hardened or source_parameterized:
             cursor.execute("SELECT * FROM Transactions WHERE userId = ?", (str(userId),))
         else:
             # Vulnerable string formatting - allows SQL injection via prompt injection
